@@ -1,0 +1,18 @@
+name = "ews-ntfy-watch"
+main = "workers/ntfy-watch.js"
+compatibility_date = "2026-05-05"
+workers_dev = false
+
+# NTFY_TOPIC is a secret: anyone who knows the topic can read and post to it.
+[vars]
+EWS_SNAPSHOT_URL = "https://pub-49bb6a6f314c47be9b481c25e5f6ca9e.r2.dev/dashboard.json"
+EWS_PUBLIC_URL = "https://ews.kylemcdonald.net/"
+EWS_MIN_LEVEL = "3"
+EWS_STALE_AFTER_MINUTES = "180"
+NTFY_SERVER = "https://ntfy.sh"
+
+[triggers]
+crons = ["*/10 * * * *"]
+
+[[kv_namespaces]]
+binding = "EWS_WATCH_KV"

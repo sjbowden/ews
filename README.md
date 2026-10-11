@@ -268,6 +268,18 @@ https://ews.kylemcdonald.net/
 
 The last alerted heatmap slot is stored in SQLite so the same slot is not reposted after a restart or retry. Run `npm run telegram:alert -- --dry-run` to verify the current alert decision without posting.
 
+### ntfy level watcher
+
+`workers/ntfy-watch.js` is a standalone Worker that needs none of the rest of the deployment. Every 10 minutes it fetches the public `dashboard.json`, and posts to an [ntfy](https://ntfy.sh) topic when the emergency level rises to `EWS_MIN_LEVEL` (default 3) or higher. It also posts once if no new snapshot has appeared for `EWS_STALE_AFTER_MINUTES`, and once more when updates resume. State lives in a KV namespace that Wrangler creates on first deploy.
+
+```bash
+npm run test:ntfy-watch
+npm run deploy:ntfy-watch
+printf '%s' "your-long-random-topic" | npx wrangler secret put NTFY_TOPIC --config wrangler.ntfy.toml
+```
+
+Subscribe to the same topic in the ntfy app. The topic name is the only access control, so treat it like a password.
+
 ### RSS emergency feed
 
 The Node server exposes the same level-5 alert stream at `/rss.xml` and `/feed.xml`. The public static deployment also includes `/rss.xml`. Scheduled refresh workflows update that feed only when a new heatmap slot reaches emergency level 5, then publish the new RSS file to R2 and redeploy the Pages endpoint.
