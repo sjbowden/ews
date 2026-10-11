@@ -32,12 +32,15 @@ async function notify(env, { title, message, priority, tags }) {
 export async function checkLevel(env, now = Date.now()) {
   const stored = await env.EWS_WATCH_KV.get(STATE_KEY, 'json');
   // watchingSince starts the staleness clock when no snapshot has ever been seen.
-  const state = stored || { level: 1, generatedAt: 0, watchingSince: now, staleNotified: false };
+  // State saved before observedAt existed has neither field, so both fall back.
+  const state = { observedAt: 0, watchingSince: now, ...(stored || { level: 1, staleNotified: false }) };
+  const staleAfterMs = Number(env.EWS_STALE_AFTER_MINUTES) * 60_000;
   let snapshot = null;
   try { snapshot = await fetchSnapshot(env); } catch (error) { console.error('Snapshot fetch failed:', error.message); }
 
-  const generatedAt = Date.parse(snapshot?.snapshotGeneratedAt);
-  if (generatedAt > state.generatedAt) {
+  // Freshness follows the observation time: snapshotGeneratedAt also advances when old data is re-exported.
+  const observedAt = Date.parse(snapshot?.liveStatus?.latestSampledAt);
+  if (observedAt > state.observedAt && now - observedAt <= staleAfterMs) {
     const level = readLevel(snapshot);
     // State is saved only after ntfy accepts, so a failed notification retries on the next run.
     if (level >= Number(env.EWS_MIN_LEVEL) && level > state.level) {
@@ -47,15 +50,15 @@ export async function checkLevel(env, now = Date.now()) {
       await notify(env, { title: 'EWS snapshot is updating again', message: `Level ${level}\n${env.EWS_PUBLIC_URL}`,
         priority: 2, tags: 'white_check_mark' });
     }
-    await env.EWS_WATCH_KV.put(STATE_KEY, JSON.stringify({ level, generatedAt, staleNotified: false }));
+    await env.EWS_WATCH_KV.put(STATE_KEY, JSON.stringify({ level, observedAt, staleNotified: false }));
     return { level, notified: level >= Number(env.EWS_MIN_LEVEL) && level > state.level };
   }
 
-  const lastUpdateAt = state.generatedAt || state.watchingSince;
-  const stale = now - lastUpdateAt > Number(env.EWS_STALE_AFTER_MINUTES) * 60_000;
+  const lastUpdateAt = state.observedAt || state.watchingSince;
+  const stale = now - lastUpdateAt > staleAfterMs;
   if (stale && !state.staleNotified) {
     await notify(env, { title: 'EWS snapshot stopped updating',
-      message: `No new snapshot since ${new Date(lastUpdateAt).toISOString()}. Level alerts are paused.\n${env.EWS_PUBLIC_URL}`,
+      message: `No new aircraft data since ${new Date(lastUpdateAt).toISOString()}. Level alerts are paused.\n${env.EWS_PUBLIC_URL}`,
       priority: 3, tags: 'hourglass' });
     await env.EWS_WATCH_KV.put(STATE_KEY, JSON.stringify({ ...state, staleNotified: true }));
   } else if (!stored) {

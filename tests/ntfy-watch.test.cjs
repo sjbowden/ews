@@ -16,8 +16,9 @@ const MINUTE = 60_000;
 const originalFetch = global.fetch;
 let store, env, sent, snapshotResponse, ntfyStatus;
 
-function snapshotAt(time, level) {
-  return () => Response.json({ snapshotGeneratedAt: new Date(time).toISOString(),
+function snapshotAt(time, level, generatedAt = time) {
+  return () => Response.json({ snapshotGeneratedAt: new Date(generatedAt).toISOString(),
+    liveStatus: { latestSampledAt: new Date(time).toISOString() },
     signals: { composite: { emergencyLevel: level, actualConcurrentCount: 521, expectedConcurrentCount: 400.4 } } });
 }
 
@@ -87,6 +88,33 @@ test('a stalled or unreachable snapshot warns once, then reports recovery', asyn
   snapshotResponse = snapshotAt(T0 + 300 * MINUTE, 1);
   await checkLevel(env, T0 + 300 * MINUTE);
   assert.equal(sent[1].title, 'EWS snapshot is updating again');
+});
+
+test('re-exported old observations still go stale and do not count as recovery', async () => {
+  snapshotResponse = snapshotAt(T0, 1);
+  await checkLevel(env, T0 + MINUTE);
+  for (const minutes of [60, 190, 400]) {
+    snapshotResponse = snapshotAt(T0, 4, T0 + minutes * MINUTE);
+    await checkLevel(env, T0 + minutes * MINUTE);
+  }
+  assert.deepEqual(sent.map(x => x.title), ['EWS snapshot stopped updating']);
+});
+
+test('a newer observation that is already too old does not alert', async () => {
+  snapshotResponse = snapshotAt(T0, 1);
+  await checkLevel(env, T0 + MINUTE);
+  snapshotResponse = snapshotAt(T0 + 30 * MINUTE, 5, T0 + 600 * MINUTE);
+  await checkLevel(env, T0 + 600 * MINUTE);
+  assert.deepEqual(sent.map(x => x.title), ['EWS snapshot stopped updating']);
+});
+
+test('state saved by the earlier version keeps its level and still alerts', async () => {
+  store.set('state', JSON.stringify({ level: 3, generatedAt: T0, staleNotified: false }));
+  snapshotResponse = snapshotAt(T0 + MINUTE, 3);
+  await checkLevel(env, T0 + 2 * MINUTE);
+  snapshotResponse = snapshotAt(T0 + 31 * MINUTE, 4);
+  await checkLevel(env, T0 + 32 * MINUTE);
+  assert.deepEqual(sent.map(x => x.title), ['EWS emergency level 4']);
 });
 
 test('a snapshot that is unreachable from the first run still warns', async () => {
