@@ -8,7 +8,7 @@ workers_dev = false
 EWS_SNAPSHOT_URL = "https://pub-49bb6a6f314c47be9b481c25e5f6ca9e.r2.dev/dashboard.json"
 EWS_PUBLIC_URL = "https://ews.kylemcdonald.net/"
 EWS_MIN_LEVEL = "3"
-EWS_STALE_AFTER_MINUTES = "180"
+EWS_STALE_AFTER_MINUTES = "720"
 NTFY_SERVER = "https://ntfy.sh"
 
 [triggers]
