@@ -50,6 +50,19 @@ def last_backfilled_end_date(db_path):
     return dt.date.fromisoformat(max(end_dates))
 
 
+def incomplete_days(db_path, start_date, end_date):
+    connection = sqlite3.connect(db_path)
+    try:
+        rows = connection.execute(
+            "SELECT day FROM daily_metrics WHERE day >= ? AND day < ? AND sample_count < 48 ORDER BY day",
+            (start_date.isoformat(), end_date.isoformat()),
+        ).fetchall()
+    finally:
+        connection.close()
+
+    return [row[0] for row in rows]
+
+
 def write_backup(db_path, backup_dir):
     backup_dir = pathlib.Path(backup_dir).expanduser()
     backup_dir.mkdir(parents=True, exist_ok=True)
@@ -117,6 +130,8 @@ def main():
                 "startDate": start_date.isoformat(),
                 "endDate": end_date.isoformat(),
                 "days": max(0, (end_date - start_date).days),
+                # Days where the source had no file for some half-hour slots; these are not retried.
+                "incompleteDays": [] if args.dry_run else incomplete_days(args.db, start_date, end_date),
                 "backupPath": str(backup_path) if backup_path else None,
             }
         )

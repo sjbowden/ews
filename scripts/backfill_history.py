@@ -240,21 +240,26 @@ def ingest_metrics(connection, tracked_by_hex, start_date, end_date, skip_downlo
 
     for day_offset in range((end_date - start_date).days):
         date_value = start_date + dt.timedelta(days=day_offset)
+        day_available_files = 0
         for index in range(48):
             processed_files += 1
             destination = cache_path_for(date_value, index)
             if not skip_download:
                 available = download_heatmap(date_value, index, destination, rate_limit_seconds)
+                # Failures raise so main() rolls back: an outage must not replace existing
+                # history with gaps or be recorded as a completed backfill.
+                if available is None:
+                    raise RuntimeError(f"Could not download {heatmap_url_for(date_value, index)}")
                 if not available:
                     continue
             elif not destination.exists():
                 continue
 
+            day_available_files += 1
             try:
                 slices = parse_heatmap(str(destination), return_callsigns=False, hex_filter=tracked_hex_filter)
             except Exception as error:  # pragma: no cover - defensive parser handling
-                print(f"Could not parse {destination}: {error}", file=sys.stderr)
-                continue
+                raise RuntimeError(f"Could not parse {destination}: {error}") from error
             finally:
                 if destination.exists() and not keep_cache and not skip_download:
                     destination.unlink()
@@ -306,6 +311,9 @@ def ingest_metrics(connection, tracked_by_hex, start_date, end_date, skip_downlo
 
             if processed_files % 48 == 0:
                 print(f"Processed {processed_files}/{total_files} heatmap files", file=sys.stderr)
+
+        if not skip_download and day_available_files == 0:
+            raise RuntimeError(f"No heatmap files were available for {date_value.isoformat()}")
 
     if current_day is not None:
         flush_day(current_day)
@@ -385,6 +393,7 @@ def main():
         })),
     )
     run_id = connection.execute("SELECT last_insert_rowid()").fetchone()[0]
+    connection.commit()
 
     try:
         purge_demo_state(connection)
@@ -405,6 +414,7 @@ def main():
         )
         connection.commit()
     except Exception:
+        connection.rollback()
         connection.execute(
             "UPDATE ingestion_runs SET finished_at = ?, status = ? WHERE id = ?",
             (dt.datetime.now(dt.timezone.utc).isoformat(), "failed", run_id),
