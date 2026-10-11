@@ -74,6 +74,13 @@ python3 scripts/backfill_history.py --skip-download
 python3 scripts/track_non_icao_hex.py --start-date 2026-04-20 --end-date 2026-05-01 --skip-download
 ```
 
+To keep an existing history current, run a top-up. It backfills every complete UTC day since the last completed backfill in weekly chunks, and writes a dated gzipped copy of the database when `--backup-dir` or `EWS_BACKUP_DIR` is set:
+
+```bash
+npm run topup -- --backup-dir ~/Dropbox/EWS
+npm run topup -- --dry-run
+```
+
 The default backfill reads tracked aircraft directly from SQLite, so once the global cohort is imported you do not need a separate watchlist file.
 
 When the import or backfill starts, any previously seeded demo data is removed so it cannot pollute the real baseline.

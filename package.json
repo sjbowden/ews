@@ -27,6 +27,7 @@
     "import:global": "python3 scripts/import_global_cohort.py",
     "seed:demo": "python3 scripts/seed_demo_data.py",
     "backfill": "python3 scripts/backfill_history.py",
+    "topup": "python3 scripts/topup_history.py",
     "track:non-icao": "python3 scripts/track_non_icao_hex.py",
     "audit:recent": "python3 scripts/audit_recent_history_coverage.py --db data/ews-main.sqlite --db data/ews-military.sqlite --db data/ews-untracked.sqlite --slots 48",
     "update:main": "python3 scripts/update_latest_heatmap.py --db data/ews-main.sqlite",
